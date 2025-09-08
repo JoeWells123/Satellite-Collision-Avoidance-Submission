@@ -64,7 +64,6 @@ timeVector = datetime(timeVector, 'TimeZone', '');
 intvls.StartTime = datetime(intvls.StartTime, 'TimeZone', '');
 intvls.EndTime = datetime(intvls.EndTime, 'TimeZone', '');
 
-% Convert cell array to a single vector of all measurement times
 for interval_idx = 1:height(intvls)
     interval_start = intvls.StartTime(interval_idx);
     interval_end = intvls.EndTime(interval_idx);
@@ -79,26 +78,20 @@ ISS_position_covs = weighted_covariance(1:3, 1:3, :);
 ISS_positions_km = ISS_positions / 1000;
 earthRadius_km = earthRadius / 1000;
 
-% Create time vector for plotting
 time_hours = hours(timeVector - startTime);
 
-%% Enhanced Plot 1: ISS Trajectory in 3D with Update Points
 figure('Position', [100, 100, 1400, 1000]);
 subplot(2, 3, 1);
-position_magnitude = sqrt(sum(ISS_positions_km.^2, 1)); % Euclidean distance
-% Plot the magnitude
+position_magnitude = sqrt(sum(ISS_positions_km.^2, 1));
 plot(time_hours, position_magnitude, 'm-', 'LineWidth', 1.5, 'DisplayName', 'Position Magnitude');
 hold on;
 
-% Calculate uncertainty in magnitude (1σ bounds)
 std_dev_magnitude = zeros(1, numTimeSteps);
 for i = 1:numTimeSteps
-    % Combined variance: sum of variances in x, y, z (neglecting covariance terms for simplicity)
-    combined_variance = sum(diag(ISS_position_covs(:, :, i))) / (1000^2); % Convert to km^2
+    combined_variance = sum(diag(ISS_position_covs(:, :, i))) / (1000^2);
     std_dev_magnitude(i) = sqrt(combined_variance);
 end
 
-% Add uncertainty bounds
 upper_bound = position_magnitude + std_dev_magnitude;
 lower_bound = position_magnitude - std_dev_magnitude;
 fill([time_hours, fliplr(time_hours)], [upper_bound, fliplr(lower_bound)], ...
@@ -122,11 +115,9 @@ gs_measurement = groundStation(sc_measurement, lat, lon);
 for interval_idx = 1:height(intvls)
     fprintf('\nProcessing interval %d of %d...\n', interval_idx, height(intvls));
     
-    % Get start and end times for this interval
     interval_start = intvls.StartTime(interval_idx);
     interval_end = intvls.EndTime(interval_idx);
     
-    % Find all time indices within this interval
     interval_mask = (timeVector >= interval_start) & (timeVector <= interval_end);
     interval_time_indices = find(interval_mask);
     interval_time_indices = interval_time_indices(1:6:end);
@@ -138,7 +129,7 @@ for interval_idx = 1:height(intvls)
     
     fprintf('  Interval from %s to %s\n', datetime(interval_start), datetime(interval_end));
     fprintf('  Processing %d observation times in this interval\n', length(interval_time_indices));
-    % Process each observation time within the interval
+    
     for obs_idx = 1:length(interval_time_indices)
         timeIndex = interval_time_indices(obs_idx);
         measurement_time = timeVector(timeIndex);
@@ -149,20 +140,14 @@ for interval_idx = 1:height(intvls)
         fprintf('    Observation %d/%d at time: %s (index %d)\n', ...
                 obs_idx, length(interval_time_indices), datetime(measurement_time), timeIndex);
 
-        
-
         [measured_position, measured_velocity] = states(Initial_sat, measurement_time);
 
-
-        % Measurement vector
-        z_true = [measured_position; measured_velocity];    % noise-free measurement from truth
+        z_true = [measured_position; measured_velocity];
         
-        % measurement noise covariance 
         R = diag([10^2,10^2,10^2, 2e-2^2,2e-2^2,2e-2^2]);
      
         noise = sqrt(diag(R)) .* randn(size(R,1),1);
         
-        % actual measurement passed to filter
         z = z_true + noise;
         
         mu_est = zeros(6, N);
@@ -186,17 +171,13 @@ for interval_idx = 1:height(intvls)
         for i = 1:N
             z_pred_weighted = z_pred_weighted + Weights(i) * z_pred_all(:, i);
         end
-        fprintf('Predicted: Pos_x = %.6f, Vel_x = %.6f', ...
-            z_pred_weighted(1), z_pred_weighted(4));
-        fprintf('Measured : Pos_x = %.6f, Vel_x = %.6f', ...
-            z(1), z(4));
+        fprintf('Predicted: Pos_x = %.6f, Vel_x = %.6f', z_pred_weighted(1), z_pred_weighted(4));
+        fprintf('Measured : Pos_x = %.6f, Vel_x = %.6f', z(1), z(4));
 
-        
-        % Rest of your processing code remains the same...
         y_weighted = zeros(6, 1);
-        y_weighted(1) = z(1) - z_pred_weighted(1);                    % Range
-        y_weighted(2) = z(2) - z_pred_weighted(2);         % Elevation
-        y_weighted(3) = z(3) - z_pred_weighted(3);         % Azimuth
+        y_weighted(1) = z(1) - z_pred_weighted(1);
+        y_weighted(2) = z(2) - z_pred_weighted(2);
+        y_weighted(3) = z(3) - z_pred_weighted(3);
         y_weighted(4) = z(4) - z_pred_weighted(4);
         y_weighted(5) = z(5) - z_pred_weighted(5);
         y_weighted(6) = z(6) - z_pred_weighted(6);
@@ -204,15 +185,10 @@ for interval_idx = 1:height(intvls)
         predicted_measurements = [predicted_measurements, z_pred_weighted];
         measurement_residuals = [measurement_residuals, y_weighted];
         all_determinants = [all_determinants, det(weighted_covariance(:, :, timeIndex))];
-        
-
 
         S_mixture = zeros(6, 6);
         for i = 1:N
-            % Standard weighted covariance
             S_mixture = S_mixture + Weights(i) * S_all{i};
-            
-            % Cross-covariance term (this is what you're missing)
             y_diff = z_pred_all(:, i) - z_pred_weighted;
             S_mixture = S_mixture + Weights(i) * (y_diff * y_diff');
         end
@@ -222,13 +198,9 @@ for interval_idx = 1:height(intvls)
         disp(mahalanobis_dist_overall);
         
         l = compute_weight(z_pred_all, z, inv(S_mixture), N);
-        %l = l(:);
-        %disp(l)
         Weights = Weights .* l;
         Weights = Weights / sum(Weights);
       
-        %Weights = UpdateGSFWeights(Weights, y_all, S_all);
-
         [keep, Neff] = stratified_resample_unique(Weights);
         Neff_vals = [Neff_vals, Neff];
 
@@ -236,72 +208,46 @@ for interval_idx = 1:height(intvls)
 
         if Neff < Nmin
             fprintf('    Neff (%.2f) < Nmin (%.2f), performing resampling...\n', Neff, Nmin);
-            
-            % Perform stratified resampling
             [keep_indices, ~] = stratified_resample_unique(Weights);
-            
-            % Extract resampled components
             kept_means = mu_est(:, keep_indices);
             kept_covs = P_est(:, :, keep_indices);
-            kept_weights = ones(length(keep_indices), 1) / length(keep_indices); % Uniform weights after resampling
-            
+            kept_weights = ones(length(keep_indices), 1) / length(keep_indices);
             fprintf('    Selected %d components from original %d\n', length(keep_indices), N);
-            
-            % Compute mixture statistics for generating new samples
             x_mean = kept_means * kept_weights;
             P_mixture = zeros(size(kept_covs, 1), size(kept_covs, 2));
-            
-            % Calculate mixture covariance properly
             for i = 1:length(keep_indices)
                 diff = kept_means(:, i) - x_mean;
                 P_mixture = P_mixture + kept_weights(i) * (kept_covs(:, :, i) + diff * diff');
             end
-            
-            % Add regularization to ensure positive definiteness
             P_mixture = P_mixture + 1e-8 * eye(size(P_mixture));
-            
-            % Generate new samples from the mixture
             try
                 sampled_Particles = mvnrnd(x_mean, P_mixture, numSamples);
-                
-                % Fit new Gaussian mixture
                 options = statset('MaxIter', 1000, 'Display', 'off');
                 gm = fitgmdist(sampled_Particles, N, 'Options', options, 'RegularizationValue', 1e-6);
-                
-                % Extract new components
                 sample_gaussian_means = gm.mu';
                 sample_gaussian_covs = gm.Sigma;
                 Weights = gm.ComponentProportion';
-                
-                % Ensure weights sum to 1
                 Weights = Weights / sum(Weights);
-                
                 fprintf('    Resampling successful. New weights sum: %.6f\n', sum(Weights));
-                
             catch ME
                 fprintf('    Warning: Resampling failed (%s). Using original estimates.\n', ME.message);
                 sample_gaussian_means = mu_est;
                 sample_gaussian_covs = P_est;
-                % Keep original weights but renormalize
                 Weights = Weights / sum(Weights);
             end
-            
         else
             fprintf('    Neff (%.2f) >= Nmin (%.2f), no resampling needed\n', Neff, Nmin);
             sample_gaussian_means = mu_est;
             sample_gaussian_covs = P_est;
-            % Ensure weights are still normalized
             Weights = Weights / sum(Weights);
         end
 
-        % Corrected Multiple Gaussians UKF Code
         alpha = 1e-3;
         beta = 2;
         kappa = -3;
         n = 6; 
         n_sigma = 2*n + 1; 
         Q_reduced = diag([1e-2, 1e-2, 1e-2, 1e-4, 1e-4, 1e-4]);
-        % Generate sigma points for each Gaussian
         ISS_all_sigma_points = zeros(n, n_sigma, N);
         ISS_all_Wm = zeros(n_sigma, N);
         ISS_all_Wc = zeros(n_sigma, N);
@@ -314,30 +260,23 @@ for interval_idx = 1:height(intvls)
             ISS_all_Wc(:, i) = Wc;
         end
 
-        % Convert to Keplerian coordinates for each Gaussian
         keplerian_sigma_points = zeros(n, n_sigma, N);
         for i = 1:N
             for j = 1:n_sigma
                 [kep_j, jacob_eci2kep] = car2kep_ell(ISS_all_sigma_points(1:3, j, i), ISS_all_sigma_points(4:6, j, i), mu_earth, true);
-                kep_j(3:6) = rad2deg(kep_j(3:6)); % if angles are in positions 3–6
+                kep_j(3:6) = rad2deg(kep_j(3:6));
                 keplerian_sigma_points(:, j, i) = kep_j';
             end
         end
         
-        % Propagate sigma points for each Gaussian
-        ISS_positions = cell(n_sigma, N);  % Fixed indexing: sigma points x Gaussians
+        ISS_positions = cell(n_sigma, N);
         ISS_velocities = cell(n_sigma, N);
-        
-        % Calculate remaining time steps
         remaining_times = timeVector(timeIndex:end);
         num_remaining_steps = length(remaining_times);
-        
         ISS_predicted_mean_cartesian = zeros(6, num_remaining_steps, N);
         ISS_predicted_cov_cartesian = zeros(6, 6, num_remaining_steps, N);
         
-        % Process each Gaussian
         for j = 1:N
-            % Create individual scenarios for each sigma point of this Gaussian
             for i = 1:n_sigma
                 a = keplerian_sigma_points(1, i, j);
                 e = keplerian_sigma_points(2, i, j);
@@ -346,39 +285,26 @@ for interval_idx = 1:height(intvls)
                 argP = keplerian_sigma_points(5, i, j);
                 theta = keplerian_sigma_points(6, i, j);
                 
-                % Create individual scenario for each sigma point
                 sc_ISS = satelliteScenario(measurement_time, stopTime, sampleTime);
-                sat = satellite(sc_ISS, ...
-                    a, ...
-                    e, ...
-                    inc, ...
-                    raan, ...
-                    argP, ...
-                    theta, ...
-                    "OrbitPropagator", "two-body-keplerian");
+                sat = satellite(sc_ISS, a, e, inc, raan, argP, theta, "OrbitPropagator", "two-body-keplerian");
                 
                 [pos, vel, ~] = states(sat);
-                ISS_positions{i, j} = pos;  % Fixed indexing
-                ISS_velocities{i, j} = vel; % Fixed indexing
+                ISS_positions{i, j} = pos;
+                ISS_velocities{i, j} = vel;
             end
            
-            % Process each time step for this Gaussian
             for t = 1:num_remaining_steps
-                % Collect sigma points at this time step
                 sigma_points_cartesian = zeros(6, n_sigma);
                 for i = 1:n_sigma
-                    r_t = ISS_positions{i, j}(:, t);  % Fixed indexing
-                    v_t = ISS_velocities{i, j}(:, t); % Fixed indexing
+                    r_t = ISS_positions{i, j}(:, t);
+                    v_t = ISS_velocities{i, j}(:, t);
                     sigma_points_cartesian(:, i) = [r_t; v_t];
                 end
                 
                 Wm_j = ISS_all_Wm(:, j);
                 Wc_j = ISS_all_Wc(:, j);
                 
-                % Compute weighted mean
                 mean_jt = sigma_points_cartesian * Wm_j; 
-                
-                % Compute weighted covariance
                 cov_jt = zeros(6, 6);
                 for i = 1:n_sigma
                     diff = sigma_points_cartesian(:, i) - mean_jt;
@@ -389,18 +315,13 @@ for interval_idx = 1:height(intvls)
                 ISS_predicted_cov_cartesian(:, :, t, j) = cov_jt;
             end
             
-            % Store results in the correct time indices
             gaussian_ECI_means(:, timeIndex:end, j) = ISS_predicted_mean_cartesian(:, :, j);
             gaussian_ECI_covs(:, :, timeIndex:end, j) = ISS_predicted_cov_cartesian(:, :, :, j);
-            
-            % Set initial conditions at measurement time
             gaussian_ECI_means(:, timeIndex, j) = sample_gaussian_means(:, j);
             gaussian_ECI_covs(:, :, timeIndex, j) = sample_gaussian_covs(:, :, j);
         end
 
-        % Mixture step: combine results from all Gaussians
         for t = timeIndex:size(gaussian_ECI_means, 2)
-            % Compute mixture mean
             mean_mix_t = zeros(6, 1);
             for j = 1:N
                 mean_j = gaussian_ECI_means(:, t, j);
@@ -409,13 +330,11 @@ for interval_idx = 1:height(intvls)
             end
             weighted_mean(:, t) = mean_mix_t;
             
-            % Compute mixture covariance
             cov_mix_t = zeros(6, 6);
             for j = 1:N
                 mean_j = gaussian_ECI_means(:, t, j); 
                 cov_j = gaussian_ECI_covs(:, :, t, j);
                 w_j = Weights(j);
-                
                 diff = mean_j - mean_mix_t;
                 cov_mix_t = cov_mix_t + w_j * (cov_j + diff * diff'); 
             end
@@ -425,21 +344,14 @@ for interval_idx = 1:height(intvls)
 end
 
 function l = compute_weight(z, zObs, R, N)
-
-    % Compute weights in log-space for numerical stability
     RSqrtm = sqrtm(R);
     nu = RSqrtm * (z - zObs);
-
-    % Compute log-likelihood
     log_l = -0.5 * sum(nu.^2, 1);
-
-    % To avoid underflow, normalize in log-space
     max_log_l = max(log_l);  
     l = exp(log_l - max_log_l);
-    
-    % Optionally normalize to sum to 1
     l = l / sum(l);
 end
+
 
 %% Plot First Particle Trajectory Over Time
 fprintf('\n=== Plotting First Particle Trajectory ===\n');
@@ -506,7 +418,6 @@ if ~isempty(measurement_residuals)
 end
 
 
-% Fixed trace plot section
 subplot(2, 2, 3);
 uncertainty_magnitude = zeros(1, numTimeSteps);
 for i = 1:numTimeSteps
