@@ -287,12 +287,11 @@ elems = struct( ...
     'inclination', measurement_means(3), ...
     'raan', measurement_means(4), ...
     'argPeriapsis', measurement_means(5), ...
-    'trueAnomaly', measurement_means(6) ...   
+    'trueAnomaly', measurement_means(6) ...
 );
 updateOMMFile(File, 'measurement.xml', elems);
 
 Initial_sat = satellite(sc_mean, 'measurement.xml', "OrbitPropagator", "two-body-keplerian");
-
 Initial_gs = groundStation(sc_mean, lat, lon);
 ac = access(Initial_sat, Initial_gs);
 intvls = accessIntervals(ac);
@@ -305,11 +304,9 @@ timeVector = datetime(timeVector, 'TimeZone', '');
 intvls.StartTime = datetime(intvls.StartTime, 'TimeZone', '');
 intvls.EndTime = datetime(intvls.EndTime, 'TimeZone', '');
 
-% Convert cell array to a single vector of all measurement times
 for interval_idx = 1:height(intvls)
     interval_start = intvls.StartTime(interval_idx);
     interval_end = intvls.EndTime(interval_idx);
-    
     interval_mask = (timeVector >= interval_start) & (timeVector <= interval_end);
     interval_time_indices = find(interval_mask);
 end
@@ -320,7 +317,6 @@ ISS_position_covs = weighted_covariance(1:3, 1:3, :);
 ISS_positions_km = ISS_positions / 1000;
 earthRadius_km = earthRadius / 1000;
 
-% Create time vector for plotting
 time_hours = hours(timeVector - startTime);
 
 predicted_measurements = [];
@@ -333,17 +329,14 @@ Neff_vals = [];
 sc_measurement = satelliteScenario(startTime, stopTime, sampleTime);
 gs_measurement = groundStation(sc_measurement, lat, lon);
 
-% Initialize cell array to store all sigma point files created during execution
 all_sigma_point_files = {};
 
 for interval_idx = 1:height(intvls)
     fprintf('\nProcessing interval %d of %d...\n', interval_idx, height(intvls));
     
-    % Get start and end times for this interval
     interval_start = intvls.StartTime(interval_idx);
     interval_end = intvls.EndTime(interval_idx);
     
-    % Find all time indices within this interval
     interval_mask = (timeVector >= interval_start) & (timeVector <= interval_end);
     interval_time_indices = find(interval_mask);
     interval_time_indices = interval_time_indices(1:30:end);
@@ -355,7 +348,7 @@ for interval_idx = 1:height(intvls)
     
     fprintf('  Interval from %s to %s\n', datetime(interval_start), datetime(interval_end));
     fprintf('  Processing %d observation times in this interval\n', length(interval_time_indices));
-    % Process each observation time within the interval
+
     for obs_idx = 1:length(interval_time_indices)
         timeIndex = interval_time_indices(obs_idx);
         measurement_time = timeVector(timeIndex);
@@ -366,20 +359,12 @@ for interval_idx = 1:height(intvls)
         fprintf('    Observation %d/%d at time: %s (index %d)\n', ...
                 obs_idx, length(interval_time_indices), datetime(measurement_time), timeIndex);
 
-        
-
         [measured_position, measured_velocity] = states(Initial_sat, measurement_time);
 
-
-        % Measurement vector
-        z_true = [measured_position; measured_velocity];    % noise-free measurement from truth
+        z_true = [measured_position; measured_velocity];    
         
-        % measurement noise covariance 
         R = diag([5^2,5^2,5^2, 1e-1^2,1e-1^2,1e-1^2]);
-     
         noise = sqrt(diag(R)) .* randn(size(R,1),1);
-        
-        % actual measurement passed to filter
         z = z_true + noise;
         
         mu_est = zeros(6, N);
@@ -403,17 +388,13 @@ for interval_idx = 1:height(intvls)
         for i = 1:N
             z_pred_weighted = z_pred_weighted + Weights(i) * z_pred_all(:, i);
         end
-        fprintf('Predicted: Pos_x = %.6f, Vel_x = %.6f', ...
-            z_pred_weighted(1), z_pred_weighted(4));
-        fprintf('Measured : Pos_x = %.6f, Vel_x = %.6f', ...
-            z(1), z(4));
+        fprintf('Predicted: Pos_x = %.6f, Vel_x = %.6f', z_pred_weighted(1), z_pred_weighted(4));
+        fprintf('Measured : Pos_x = %.6f, Vel_x = %.6f', z(1), z(4));
 
-        
-        % Rest of your processing code remains the same...
         y_weighted = zeros(6, 1);
-        y_weighted(1) = z(1) - z_pred_weighted(1);                    % Range
-        y_weighted(2) = z(2) - z_pred_weighted(2);         % Elevation
-        y_weighted(3) = z(3) - z_pred_weighted(3);         % Azimuth
+        y_weighted(1) = z(1) - z_pred_weighted(1);
+        y_weighted(2) = z(2) - z_pred_weighted(2);
+        y_weighted(3) = z(3) - z_pred_weighted(3);
         y_weighted(4) = z(4) - z_pred_weighted(4);
         y_weighted(5) = z(5) - z_pred_weighted(5);
         y_weighted(6) = z(6) - z_pred_weighted(6);
@@ -421,15 +402,10 @@ for interval_idx = 1:height(intvls)
         predicted_measurements = [predicted_measurements, z_pred_weighted];
         measurement_residuals = [measurement_residuals, y_weighted];
         all_determinants = [all_determinants, det(weighted_covariance(:, :, timeIndex))];
-        
-
 
         S_mixture = zeros(6, 6);
         for i = 1:N
-            % Standard weighted covariance
             S_mixture = S_mixture + Weights(i) * S_all{i};
-            
-            % Cross-covariance term (this is what you're missing)
             y_diff = z_pred_all(:, i) - z_pred_weighted;
             S_mixture = S_mixture + Weights(i) * (y_diff * y_diff');
         end
@@ -439,12 +415,8 @@ for interval_idx = 1:height(intvls)
         disp(mahalanobis_dist_overall);
         
         l = compute_weight(z_pred_all, z, inv(S_mixture), N);
-        %l = l(:);
-        %disp(l)
         Weights = Weights .* l;
         Weights = Weights / sum(Weights);
-      
-        %Weights = UpdateGSFWeights(Weights, y_all, S_all);
 
         [keep, Neff] = stratified_resample_unique(Weights);
         Neff_vals = [Neff_vals, Neff];
@@ -454,43 +426,33 @@ for interval_idx = 1:height(intvls)
         if Neff < Nmin
             fprintf('    Neff (%.2f) < Nmin (%.2f), performing resampling...\n', Neff, Nmin);
             
-            % Perform stratified resampling
             [keep_indices, ~] = stratified_resample_unique(Weights);
             
-            % Extract resampled components
             kept_means = mu_est(:, keep_indices);
             kept_covs = P_est(:, :, keep_indices);
-            kept_weights = ones(length(keep_indices), 1) / length(keep_indices); % Uniform weights after resampling
+            kept_weights = ones(length(keep_indices), 1) / length(keep_indices);
             
             fprintf('    Selected %d components from original %d\n', length(keep_indices), N);
             
-            % Compute mixture statistics for generating new samples
             x_mean = kept_means * kept_weights;
             P_mixture = zeros(size(kept_covs, 1), size(kept_covs, 2));
             
-            % Calculate mixture covariance properly
             for i = 1:length(keep_indices)
                 diff = kept_means(:, i) - x_mean;
                 P_mixture = P_mixture + kept_weights(i) * (kept_covs(:, :, i) + diff * diff');
             end
             
-            % Add regularization to ensure positive definiteness
             P_mixture = P_mixture + 1e-8 * eye(size(P_mixture));
             
-            % Generate new samples from the mixture
             try
                 sampled_Particles = mvnrnd(x_mean, P_mixture, numSamples);
                 
-                % Fit new Gaussian mixture
                 options = statset('MaxIter', 1000, 'Display', 'off');
                 gm = fitgmdist(sampled_Particles, N, 'Options', options, 'RegularizationValue', 1e-6);
                 
-                % Extract new components
                 sample_gaussian_means = gm.mu';
                 sample_gaussian_covs = gm.Sigma;
                 Weights = gm.ComponentProportion';
-                
-                % Ensure weights sum to 1
                 Weights = Weights / sum(Weights);
                 
                 fprintf('    Resampling successful. New weights sum: %.6f\n', sum(Weights));
@@ -499,7 +461,6 @@ for interval_idx = 1:height(intvls)
                 fprintf('    Warning: Resampling failed (%s). Using original estimates.\n', ME.message);
                 sample_gaussian_means = mu_est;
                 sample_gaussian_covs = P_est;
-                % Keep original weights but renormalize
                 Weights = Weights / sum(Weights);
             end
             
@@ -507,18 +468,16 @@ for interval_idx = 1:height(intvls)
             fprintf('    Neff (%.2f) >= Nmin (%.2f), no resampling needed\n', Neff, Nmin);
             sample_gaussian_means = mu_est;
             sample_gaussian_covs = P_est;
-            % Ensure weights are still normalized
             Weights = Weights / sum(Weights);
         end
 
-        % Corrected Multiple Gaussians UKF Code
         alpha = 1e-3;
         beta = 2;
         kappa = -3;
         n = 6; 
         n_sigma = 2*n + 1; 
         Q_reduced = diag([1e-2, 1e-2, 1e-2, 1e-4, 1e-4, 1e-4]);
-        % Generate sigma points for each Gaussian
+
         ISS_all_sigma_points = zeros(n, n_sigma, N);
         ISS_all_Wm = zeros(n_sigma, N);
         ISS_all_Wc = zeros(n_sigma, N);
@@ -531,29 +490,24 @@ for interval_idx = 1:height(intvls)
             ISS_all_Wc(:, i) = Wc;
         end
 
-        % Convert to Keplerian coordinates for each Gaussian
         keplerian_sigma_points = zeros(n, n_sigma, N);
         for i = 1:N
             for j = 1:n_sigma
-                [kep_j, jacob_eci2kep] = car2kep_ell(ISS_all_sigma_points(1:3, j, i), ISS_all_sigma_points(4:6, j, i), mu_earth, true);
-                kep_j(3:6) = rad2deg(kep_j(3:6)); % if angles are in positions 3–6
-                keplerian_sigma_points(:, j, i) = kep_j';
+                [a, ecc, incl, RAAN, argp, nu, truelon, arglat, lonper] = ijk2keplerian(ISS_all_sigma_points(1:3, j, i), ISS_all_sigma_points(4:6, j, i));
+                keplerian_sigma_points(:, j, i) = [a, ecc, incl, RAAN, argp, nu]';
             end
         end
-        % Propagate sigma points for each Gaussian
-        ISS_positions = cell(n_sigma, N);  % Fixed indexing: sigma points x Gaussians
+
+        ISS_positions = cell(n_sigma, N);
         ISS_velocities = cell(n_sigma, N);
         
-        % Calculate remaining time steps
         remaining_times = timeVector(timeIndex:end);
         num_remaining_steps = length(remaining_times);
         
         ISS_predicted_mean_cartesian = zeros(6, num_remaining_steps, N);
         ISS_predicted_cov_cartesian = zeros(6, 6, num_remaining_steps, N);
         
-        % Process each Gaussian
         for j = 1:N
-            % Create individual scenarios for each sigma point of this Gaussian
             for i = 1:n_sigma
                 a = keplerian_sigma_points(1, i, j);
                 e = keplerian_sigma_points(2, i, j);
@@ -562,39 +516,27 @@ for interval_idx = 1:height(intvls)
                 argP = keplerian_sigma_points(5, i, j);
                 theta = keplerian_sigma_points(6, i, j);
                 
-                % Create individual scenario for each sigma point
                 sc_ISS = satelliteScenario(measurement_time, stopTime, sampleTime);
-                sat = satellite(sc_ISS, ...
-                    a, ...
-                    e, ...
-                    inc, ...
-                    raan, ...
-                    argP, ...
-                    theta, ...
-                    "OrbitPropagator", "two-body-keplerian");
+                sat = satellite(sc_ISS, a, e, inc, raan, argP, theta, "OrbitPropagator", "two-body-keplerian");
                 
                 [pos, vel, ~] = states(sat);
-                ISS_positions{i, j} = pos;  % Fixed indexing
-                ISS_velocities{i, j} = vel; % Fixed indexing
+                ISS_positions{i, j} = pos;
+                ISS_velocities{i, j} = vel;
             end
 
-            % Process each time step for this Gaussian
             for t = 1:num_remaining_steps
-                % Collect sigma points at this time step
                 sigma_points_cartesian = zeros(6, n_sigma);
                 for i = 1:n_sigma
-                    r_t = ISS_positions{i, j}(:, t);  % Fixed indexing
-                    v_t = ISS_velocities{i, j}(:, t); % Fixed indexing
+                    r_t = ISS_positions{i, j}(:, t);
+                    v_t = ISS_velocities{i, j}(:, t);
                     sigma_points_cartesian(:, i) = [r_t; v_t];
                 end
                 
                 Wm_j = ISS_all_Wm(:, j);
                 Wc_j = ISS_all_Wc(:, j);
                 
-                % Compute weighted mean
                 mean_jt = sigma_points_cartesian * Wm_j; 
                 
-                % Compute weighted covariance
                 cov_jt = zeros(6, 6);
                 for i = 1:n_sigma
                     diff = sigma_points_cartesian(:, i) - mean_jt;
@@ -605,18 +547,14 @@ for interval_idx = 1:height(intvls)
                 ISS_predicted_cov_cartesian(:, :, t, j) = cov_jt;
             end
             
-            % Store results in the correct time indices
             gaussian_ECI_means(:, timeIndex:end, j) = ISS_predicted_mean_cartesian(:, :, j);
             gaussian_ECI_covs(:, :, timeIndex:end, j) = ISS_predicted_cov_cartesian(:, :, :, j);
             
-            % Set initial conditions at measurement time
             gaussian_ECI_means(:, timeIndex, j) = sample_gaussian_means(:, j);
             gaussian_ECI_covs(:, :, timeIndex, j) = sample_gaussian_covs(:, :, j);
         end
 
-        % Mixture step: combine results from all Gaussians
         for t = timeIndex:size(gaussian_ECI_means, 2)
-            % Compute mixture mean
             mean_mix_t = zeros(6, 1);
             for j = 1:N
                 mean_j = gaussian_ECI_means(:, t, j);
@@ -625,7 +563,6 @@ for interval_idx = 1:height(intvls)
             end
             weighted_mean(:, t) = mean_mix_t;
             
-            % Compute mixture covariance
             cov_mix_t = zeros(6, 6);
             for j = 1:N
                 mean_j = gaussian_ECI_means(:, t, j); 
@@ -656,256 +593,6 @@ function l = compute_weight(z, zObs, R, N)
     
     % Optionally normalize to sum to 1
     l = l / sum(l);
-end
-
-
-function [kep, jacob] = car2kep_ell(pos, vel, mu, cjac)
-% CAR2KEP_ELL Cartesian to classical Keplerian orbital elements
-%
-% Syntax:
-%   [kep, jacob] = car2kep_ell(pos, vel)
-%   [kep, jacob] = car2kep_ell(pos, vel, mu)
-%   [kep, jacob] = car2kep_ell(pos, vel, mu, cjac)
-%
-% Description:
-%   Converts cartesian orbital elements to classical Keplerian orbital elements.
-%   The transformation jacobian is optionally computed.
-%   This function only handles elliptical orbits.
-%
-% Inputs:
-%   pos  - Position [X;Y;Z] [m] (3xN matrix)
-%   vel  - Velocity [Vx;Vy;Vz] [m/s] (3xN matrix)
-%   mu   - (optional) Gravitational constant [m^3/s^2] (default: 3.986004418e14 for Earth)
-%   cjac - (optional) Set to false to avoid computing jacobian (default: true)
-%
-% Outputs:
-%   kep   - Classical Keplerian orbital elements [sma;e;inc;raan;pom;nu] [m,rad] (6xN)
-%           where nu is the true anomaly (changed from mean anomaly)
-%           Note: RAAN and argument of perigee are swapped from typical order
-%   jacob - (optional) Transformation jacobian (6x6xN)
-%
-% Example:
-%   pos = [7000e3; 1000e3; -500e3];
-%   vel = [1e3; 2e3; 7e3];
-%   [kep, jacob] = car2kep_ell(pos, vel);
-
-% Default values
-if nargin < 3 || isempty(mu)
-    mu = 3.986004418e14; % Earth's gravitational parameter [m^3/s^2]
-end
-
-if nargin < 4
-    cjac = true;
-end
-
-% Orbital thresholds
-EPS_CIR = 1e-10;   % Circular orbit threshold
-EPS_EQUA = 1e-10;  % Equatorial orbit threshold
-
-N = size(pos, 2);
-
-% Initialize jacobian
-if nargout > 1
-    jacob = zeros(6, 6, N);
-else
-    cjac = false;
-end
-
-% Helper functions
-function result = norm_vec(v)
-    result = sqrt(sum(v.^2, 1));
-end
-
-function result = cross_vec(a, b)
-    result = [a(2,:).*b(3,:) - a(3,:).*b(2,:);
-              a(3,:).*b(1,:) - a(1,:).*b(3,:);
-              a(1,:).*b(2,:) - a(2,:).*b(1,:)];
-end
-
-function result = dot_vec(a, b)
-    result = sum(a.*b, 1);
-end
-
-function result = reduce_angle(angles)
-    result = mod(angles, 2*pi);
-end
-
-% Main calculations
-r = norm_vec(pos);
-V = norm_vec(vel);
-W = cross_vec(pos, vel);
-pos_vel = dot_vec(pos, vel);
-
-% Semi-major axis
-a = r ./ (2 - r .* V.^2 / mu);
-
-% Inclination
-inc = atan2(sqrt(W(1,:).^2 + W(2,:).^2), W(3,:));
-
-% Right ascension of ascending node (RAAN)
-node = cross_vec([0; 0; 1], W);
-gom = atan2(node(2,:), node(1,:));
-
-% Handle equatorial orbits
-Ieq = find(sin(inc) < EPS_EQUA);
-gom(Ieq) = 0;
-node(1, Ieq) = 1;
-node(2, Ieq) = 0;
-node(3, Ieq) = 0;
-
-% Eccentricity
-esinE = pos_vel ./ sqrt(mu .* a);
-ecosE = r .* V.^2 / mu - 1;
-e = sqrt(ecosE.^2 + esinE.^2);
-Icir = find(e < EPS_CIR);
-
-% Eccentric anomaly and true anomaly
-E = atan2(esinE, ecosE);
-
-% Argument of perigee
-cos_alpha_v = dot_vec(pos, node);
-sin_alpha_v = dot_vec(pos, cross_vec(W, node)) ./ norm_vec(W);
-alpha_v = atan2(sin_alpha_v, cos_alpha_v);
-
-% True anomaly from eccentric anomaly
-nu = 2 * atan2(sqrt(1+e) .* sin(E/2), sqrt(1-e) .* cos(E/2));
-pom = alpha_v - nu;
-
-% Handle circular orbits - for circular orbits, use argument of latitude
-% In circular orbits, true anomaly becomes the argument of latitude
-pom_circular = pom;
-pom(Icir) = 0;
-nu(Icir) = nu(Icir) + pom_circular(Icir);
-
-% Reduce angles to [0, 2π)
-kep = [a; e; inc; reduce_angle(gom); reduce_angle(pom); reduce_angle(nu)];
-
-% Jacobian computation
-if cjac && nargout > 1
-    % Set eccentricity to NaN for circular orbits to handle divisions
-    ecir = e;
-    ecir(Icir) = NaN;
-    
-    sinE = sin(E);
-    cosE = cos(E);
-    n = sqrt(mu ./ a.^3);
-    
-    % P and Q vectors (rotation matrix columns)
-    P1 = cosE ./ r .* pos(1,:) - sinE ./ (n .* a) .* vel(1,:);
-    P2 = cosE ./ r .* pos(2,:) - sinE ./ (n .* a) .* vel(2,:);
-    P3 = cosE ./ r .* pos(3,:) - sinE ./ (n .* a) .* vel(3,:);
-    
-    Q1 = 1 ./ sqrt(1-e.^2) .* (sinE ./ r .* pos(1,:) + (cosE - e) ./ (n .* a) .* vel(1,:));
-    Q2 = 1 ./ sqrt(1-e.^2) .* (sinE ./ r .* pos(2,:) + (cosE - e) ./ (n .* a) .* vel(2,:));
-    Q3 = 1 ./ sqrt(1-e.^2) .* (sinE ./ r .* pos(3,:) + (cosE - e) ./ (n .* a) .* vel(3,:));
-    
-    % Trigonometric expressions
-    cosi = P1.*Q2 - P2.*Q1;
-    sini = sqrt(P3.^2 + Q3.^2);
-    sini(Ieq) = NaN; % Handle equatorial orbits
-    
-    cosp = Q3 ./ sini;
-    sinp = P3 ./ sini;
-    cosg = P1 .* cosp - Q1 .* sinp;
-    sing = P2 .* cosp - Q2 .* sinp;
-    
-    % True anomaly derivatives in terms of eccentric anomaly
-    % nu = 2*atan2(sqrt(1+e)*sin(E/2), sqrt(1-e)*cos(E/2))
-    % dnu/dE = sqrt(1-e^2)/(1-e*cos(E))
-    % dnu/de = sin(E)/(1-e*cos(E))
-    
-    dnu_dE = sqrt(1-e.^2) ./ (1 - e.*cosE);
-    dnu_de = sinE ./ (1 - e.*cosE);
-    
-    % Compute partial derivatives
-    for j = 1:3
-        % Semi-major axis derivatives
-        dadr = 2 * a.^2 ./ r.^3 .* pos(j,:);
-        dadv = 2 ./ (n.^2 .* a) .* vel(j,:);
-        
-        % Eccentricity components derivatives
-        decosEdr = V.^2 ./ (r * mu) .* pos(j,:);
-        desinEdr = vel(j,:) ./ (n .* a.^2) - pos_vel ./ (n .* a .* r.^3) .* pos(j,:);
-        decosEdv = 2 * r / mu .* vel(j,:);
-        desinEdv = pos(j,:) ./ (n .* a.^2) - pos_vel ./ (n .* a * mu) .* vel(j,:);
-        
-        % Eccentricity derivatives
-        dedr = sinE .* desinEdr + cosE .* decosEdr;
-        dedv = sinE .* desinEdv + cosE .* decosEdv;
-        
-        % Eccentric anomaly derivatives
-        dEdr = 1 ./ ecir .* (cosE .* desinEdr - sinE .* decosEdr);
-        dEdv = 1 ./ ecir .* (cosE .* desinEdv - sinE .* decosEdv);
-        
-        % True anomaly derivatives (replacing mean anomaly derivatives)
-        dnudr = dnu_dE .* dEdr + dnu_de .* dedr;
-        dnudv = dnu_dE .* dEdv + dnu_de .* dedv;
-        
-        % P vector derivatives
-        dPkdr = zeros(3, N);
-        for k = 1:3
-            dPkdr(k,:) = (j==k) * cosE ./ r - pos(k,:) .* cosE ./ r.^3 .* pos(j,:) - ...
-                         vel(k,:) .* sinE ./ (2*n.*a.^2) .* dadr - ...
-                         (sinE ./ r .* pos(k,:) + cosE ./ (n .* a) .* vel(k,:)) .* dEdr;
-        end
-        
-        dPkdv = zeros(3, N);
-        for k = 1:3
-            dPkdv(k,:) = (j==k) * (-sinE ./ (n.*a)) - vel(k,:) .* sinE ./ (2*n.*a.^2) .* dadv - ...
-                         (sinE ./ r .* pos(k,:) + cosE ./ (n .* a) .* vel(k,:)) .* dEdv;
-        end
-        
-        % Q vector derivatives
-        dQkdr = zeros(3, N);
-        for k = 1:3
-            dQkdr(k,:) = 1 ./ sqrt(1-e.^2) .* ...
-                         ((j==k) * sinE ./ r - pos(k,:) .* sinE ./ r.^3 .* pos(j,:) + ...
-                          vel(k,:) .* (cosE-e) ./ (2*n.*a.^2) .* dadr + ...
-                          (cosE ./ r .* pos(k,:) - sinE ./ (n .* a) .* vel(k,:)) .* dEdr + ...
-                          (esinE ./ (r .* (1-e.^2)) .* pos(k,:) + (ecosE-1) ./ (n.*a.*(1-e.^2)) .* vel(k,:)) .* dedr);
-        end
-        
-        dQkdv = zeros(3, N);
-        for k = 1:3
-            dQkdv(k,:) = 1 ./ sqrt(1-e.^2) .* ...
-                         ((j==k) * (cosE-e) ./ (n.*a) + vel(k,:) .* (cosE-e) ./ (2*n.*a.^2) .* dadv + ...
-                          (cosE ./ r .* pos(k,:) - sinE ./ (n .* a) .* vel(k,:)) .* dEdv + ...
-                          (esinE ./ (r .* (1-e.^2)) .* pos(k,:) + (ecosE-1) ./ (n.*a.*(1-e.^2)) .* vel(k,:)) .* dedv);
-        end
-        
-        % Inclination derivatives
-        didr = cosi ./ sini .* (dPkdr(3,:) .* P3 + dQkdr(3,:) .* Q3) - ...
-               (P1 .* dQkdr(2,:) + Q2 .* dPkdr(1,:) - P2 .* dQkdr(1,:) - Q1 .* dPkdr(2,:)) .* sini;
-        didv = cosi ./ sini .* (dPkdv(3,:) .* P3 + dQkdv(3,:) .* Q3) - ...
-               (P1 .* dQkdv(2,:) + Q2 .* dPkdv(1,:) - P2 .* dQkdv(1,:) - Q1 .* dPkdv(2,:)) .* sini;
-        
-        % Argument of perigee derivatives
-        dpomdr = 1 ./ sini .* (dPkdr(3,:) .* cosp - dQkdr(3,:) .* sinp);
-        dpomdv = 1 ./ sini .* (dPkdv(3,:) .* cosp - dQkdv(3,:) .* sinp);
-        
-        % RAAN derivatives
-        dgomdr = (dPkdr(2,:) .* cosp - dQkdr(2,:) .* sinp) .* cosg - ...
-                 (dPkdr(1,:) .* cosp - dQkdr(1,:) .* sinp) .* sing - dpomdr .* cosi;
-        dgomdv = (dPkdv(2,:) .* cosp - dQkdv(2,:) .* sinp) .* cosg - ...
-                 (dPkdv(1,:) .* cosp - dQkdv(1,:) .* sinp) .* sing - dpomdv .* cosi;
-        
-        % Assign to jacobian matrix
-        jacob(1, j, :) = dadr;
-        jacob(2, j, :) = dedr;
-        jacob(3, j, :) = didr;
-        jacob(4, j, :) = dgomdr;  % Changed from dpomdr to dgomdr (RAAN now 4th)
-        jacob(5, j, :) = dpomdr;  % Changed from dgomdr to dpomdr (pom now 5th)
-        jacob(6, j, :) = dnudr;  % Changed from dMdr to dnudr
-        
-        jacob(1, j+3, :) = dadv;
-        jacob(2, j+3, :) = dedv;
-        jacob(3, j+3, :) = didv;
-        jacob(4, j+3, :) = dgomdv;  % Changed from dpomdv to dgomdv (RAAN now 4th)
-        jacob(5, j+3, :) = dpomdv;  % Changed from dgomdv to dpomdv (pom now 5th)
-        jacob(6, j+3, :) = dnudv;  % Changed from dMdv to dnudv
-    end
-end
-
 end
 
 
