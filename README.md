@@ -15,3 +15,7 @@ Monte_Carlo_Keplerian: This file gives the propagated distribution using Monte_C
 Updating_GS-UKF_Propagated_from_file: This file updates the state propagated with GS-UKF, this technique reads directly from the file.
 
 Updating_GS-UKF_from_elements: This file updates the state propagated with GS-UKF, this technique simply takes the keplerian elements.
+
+Debris_Folder_Total: Move the debris files from this to Debris_Total.
+
+Typically, the ISS.xml has been used as the primary satellite for comparison (note the OMM data isn't actually for the ISS, its just so the name is noticeable).
