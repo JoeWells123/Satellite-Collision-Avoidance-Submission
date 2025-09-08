@@ -263,9 +263,8 @@ for interval_idx = 1:height(intvls)
         keplerian_sigma_points = zeros(n, n_sigma, N);
         for i = 1:N
             for j = 1:n_sigma
-                [kep_j, jacob_eci2kep] = car2kep_ell(ISS_all_sigma_points(1:3, j, i), ISS_all_sigma_points(4:6, j, i), mu_earth, true);
-                kep_j(3:6) = rad2deg(kep_j(3:6));
-                keplerian_sigma_points(:, j, i) = kep_j';
+                [a, ecc, incl, RAAN, argp, nu, truelon, arglat, lonper] = ijk2keplerian(ISS_all_sigma_points(1:3, j, i), ISS_all_sigma_points(4:6, j, i));
+                keplerian_sigma_points(:, j, i) = [a, ecc, incl, RAAN, argp, nu]';
             end
         end
         
