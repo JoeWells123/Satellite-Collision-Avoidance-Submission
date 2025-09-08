@@ -1,12 +1,12 @@
 %% Time Setup
 startTime = datetime(2020,5,11,17,35,38);
 stopTime = startTime + days(2);
-sampleTime = 120; % seconds
+sampleTime = 120;
 timeVector = startTime:seconds(sampleTime):stopTime;
 numTimeSteps = length(timeVector);
 
 %% Earth Parameters
-earthRadius = 6.378137e6; % meters
+earthRadius = 6.378137e6;
 mu_earth = 3.986004418e14;
 
 xmlFolder = '/home/roboticsadmin/MATLABProjects/Debris_Folder';
@@ -40,53 +40,43 @@ P = P_ISS;
 
 %% Define different numbers of Gaussian components to test
 N_values = [10];
-%N_values = [1, 5, 10, 15];
 fprintf('\n=== Processing Multiple N Values ===\n');
 
-% Store results for each N value
 GSF_results = cell(length(N_values), 1);
 bhattacharyya_distances = cell(length(N_values), 1);
-euclidean_distances = cell(length(N_values), 1); % NEW: Store Euclidean distances
-computation_times = zeros(length(N_values), 1); % Store computation times
+euclidean_distances = cell(length(N_values), 1);
+computation_times = zeros(length(N_values), 1);
 
-% Generate particle filter reference (or use the highest N as reference)
 ref_positions = Particle_ISS_positions(1:3, :);
 ref_position_covs = Particle_ISS_position_covs(1:3, 1:3, :);
 ref_position_skewness = Particle_ISS_positions_skewness(1:3, :);
 ref_position_kurtosis = Particle_ISS_positions_kurtosis(1:3, :);
-% Process each N value
+
 for idx = 1:length(N_values)
     N = N_values(idx);
     fprintf('Processing N = %d Gaussians...\n', N);
     
-    % Start timing
     tic;
     
     [weighted_covariance, weighted_mean, gaussian_ECI_means, gaussian_ECI_covs, ISS_gaussian_means, ISS_gaussian_covs, Weights] = GenerateGSF(mu, P, N, numSamples, startTime, stopTime);
    
-    % End timing
     computation_times(idx) = toc;
     
     fprintf('  Computation time for N=%d: %.3f seconds\n', N, computation_times(idx));
     
     timeVector = datetime(timeVector, 'TimeZone', '');
 
-    % Store results
     GSF_results{idx}.weighted_covariance = weighted_covariance;
     GSF_results{idx}.weighted_mean = weighted_mean;
     GSF_results{idx}.N = N;
     
-    % Extract position data
     ISS_positions = weighted_mean(1:3, :);
     ISS_position_covs = weighted_covariance(1:3, 1:3, :);
     
-    % Calculate Bhattacharyya distance against reference
     d_bhatt = zeros(1, numTimeSteps);
-    % NEW: Calculate Euclidean distance against reference
     d_eucl = zeros(1, numTimeSteps);
     
     for k = 1:numTimeSteps
-        % Bhattacharyya distance calculation (existing)
         mu1 = ISS_positions(:, k);
         Sigma1 = ISS_position_covs(:, :, k);
         mu2 = ref_positions(:, k);
@@ -94,18 +84,17 @@ for idx = 1:length(N_values)
         
         d_bhatt(k) = bhattacharyya_distance(mu1, Sigma1, mu2, Sigma2);
         
-        % NEW: Euclidean distance calculation (in meters)
         d_eucl(k) = norm(ISS_positions(:, k) - ref_positions(:, k));
     end
     
     bhattacharyya_distances{idx} = d_bhatt;
-    euclidean_distances{idx} = d_eucl; % NEW: Store Euclidean distances
+    euclidean_distances{idx} = d_eucl;
     
     fprintf('  Mean Bhattacharyya distance: %.6f\n', mean(d_bhatt));
     fprintf('  Max Bhattacharyya distance: %.6f\n', max(d_bhatt));
-    fprintf('  Mean Euclidean distance: %.3f m\n', mean(d_eucl)); % NEW
-    fprintf('  Max Euclidean distance: %.3f m\n', max(d_eucl));   % NEW
-    fprintf('  RMS Euclidean error: %.3f m\n', sqrt(mean(d_eucl.^2))); % NEW
+    fprintf('  Mean Euclidean distance: %.3f m\n', mean(d_eucl));
+    fprintf('  Max Euclidean distance: %.3f m\n', max(d_eucl));
+    fprintf('  RMS Euclidean error: %.3f m\n', sqrt(mean(d_eucl.^2)));
 end
 
 %% Display computation time statistics
@@ -120,13 +109,11 @@ end
 timeVector = datetime(timeVector, 'TimeZone', '');
 time_hours = hours(timeVector - startTime);
 
-% Convert reference positions to km for plotting
 ref_positions_km = ref_positions / 1000;
 earthRadius_km = earthRadius / 1000;
 
 %% Enhanced Plot 1: Reference ISS Trajectory 
 figure('Position', [100, 100, 1400, 1000]);
-% Plot 1: Mean Bhattacharyya Distance vs N
 subplot(2, 2, 1);
 mean_distances = cellfun(@mean, bhattacharyya_distances);
 semilogx(N_values, mean_distances, 'bo-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -135,7 +122,6 @@ ylabel('Mean Bhattacharyya Distance');
 title('GS-UKF Convergence: Mean Distance vs N');
 grid on;
 
-% Plot 2: Max Bhattacharyya Distance vs N  
 subplot(2, 2, 2);
 max_distances = cellfun(@max, bhattacharyya_distances);
 semilogx(N_values, max_distances, 'ro-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -144,7 +130,6 @@ ylabel('Maximum Bhattacharyya Distance');
 title('GS-UKF Convergence: Maximum Distance vs N');
 grid on;
 
-% Plot 3: Standard deviation of distances vs N
 subplot(2, 2, 3);
 std_distances = cellfun(@std, bhattacharyya_distances);
 semilogx(N_values, std_distances, 'go-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -153,13 +138,11 @@ ylabel('Std Dev of Bhattacharyya Distance');
 title('GS-UKF Variability: Std Dev vs N');
 grid on;
 
-% Plot 4: Distance evolution over time for all N values
 subplot(2, 2, 4);
 hold on;
 for idx = 1:length(N_values)
     d = bhattacharyya_distances{idx};
-    plot(time_hours, d, ...
-         'LineWidth', 1.5, 'DisplayName', sprintf('N=%d', N_values(idx)));
+    plot(time_hours, d, 'LineWidth', 1.5, 'DisplayName', sprintf('N=%d', N_values(idx)));
 end
 xlabel('Time (hours)');
 ylabel('Bhattacharyya Distance');
@@ -167,10 +150,7 @@ title('GS-UKF Distance Evolution: All N Values');
 legend('Location', 'best');
 grid on;
 
-
 figure('Position', [150, 150, 1400, 1000]);
-
-% Plot 1: Mean Euclidean Distance vs N
 subplot(2, 2, 1);
 mean_distances = cellfun(@mean, euclidean_distances);
 semilogx(N_values, mean_distances, 'bo-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -179,7 +159,6 @@ ylabel('Mean Euclidean Distance (m)');
 title('GS-UKF Convergence: Mean Euclidean Distance vs N');
 grid on;
 
-% Plot 2: Max Euclidean Distance vs N
 subplot(2, 2, 2);
 max_distances = cellfun(@max, euclidean_distances);
 semilogx(N_values, max_distances, 'ro-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -188,7 +167,6 @@ ylabel('Max Euclidean Distance (m)');
 title('GS-UKF Convergence: Max Euclidean Distance vs N');
 grid on;
 
-% Plot 3: Std Dev of Euclidean Distance vs N
 subplot(2, 2, 3);
 std_distances = cellfun(@std, euclidean_distances);
 semilogx(N_values, std_distances, 'go-', 'LineWidth', 2, 'MarkerSize', 8);
@@ -197,7 +175,6 @@ ylabel('Std Dev of Euclidean Distance (m)');
 title('GS-UKF Variability: Std Dev vs N');
 grid on;
 
-% Plot 4: Euclidean Distance Evolution Over Time
 subplot(2, 2, 4);
 hold on;
 for idx = 1:length(N_values)
@@ -210,11 +187,8 @@ title('GS-UKF Distance Evolution: All N Values');
 legend('Location', 'best');
 grid on;
 
-
-%% NEW: Computation Time Analysis Plot
+%% Computation Time Analysis Plot
 figure('Position', [50, 50, 1400, 900]);
-
-% Plot 1: Computation Time vs Number of Gaussians
 subplot(2, 2, 1);
 plot(N_values, computation_times, 'bo-', 'LineWidth', 2, 'MarkerSize', 10, 'MarkerFaceColor', 'b');
 xlabel('Number of Gaussian Components (N)');
@@ -222,14 +196,12 @@ ylabel('Computation Time (seconds)');
 title('Computation Time vs Number of Gaussians');
 grid on;
 
-% Add annotations with time values
 for idx = 1:length(N_values)
     text(N_values(idx), computation_times(idx) + max(computation_times)*0.02, ...
          sprintf('%.2fs', computation_times(idx)), ...
          'HorizontalAlignment', 'center', 'FontSize', 10, 'FontWeight', 'bold');
 end
 
-% Plot 2: Semi-log plot of computation time
 subplot(2, 2, 2);
 semilogy(N_values, computation_times, 'ro-', 'LineWidth', 2, 'MarkerSize', 10, 'MarkerFaceColor', 'r');
 xlabel('Number of Gaussian Components (N)');
@@ -237,14 +209,11 @@ ylabel('Computation Time (seconds) - Log Scale');
 title('Computation Time vs N (Log Scale)');
 grid on;
 
-% Plot 3: Time complexity analysis (if more than 2 points)
 subplot(2, 2, 3);
 if length(N_values) > 2
-    % Fit polynomial to estimate complexity
     p = polyfit(log(N_values), log(computation_times), 1);
     complexity_order = p(1);
     
-    % Plot actual times and fitted line
     loglog(N_values, computation_times, 'go', 'MarkerSize', 10, 'MarkerFaceColor', 'g');
     hold on;
     N_fit = linspace(min(N_values), max(N_values), 100);
@@ -257,14 +226,12 @@ if length(N_values) > 2
     legend('Actual Times', sprintf('Fitted: O(N^{%.2f})', complexity_order), 'Location', 'best');
     grid on;
 else
-    % Simple linear plot if only 2 points
     plot(N_values, computation_times, 'go-', 'LineWidth', 2, 'MarkerSize', 10, 'MarkerFaceColor', 'g');
     xlabel('Number of Gaussian Components (N)');
     ylabel('Computation Time (seconds)');
     title('Time Complexity Analysis');
     grid on;
     
-    % Calculate growth rate
     if length(N_values) == 2
         growth_rate = (computation_times(2) - computation_times(1)) / (N_values(2) - N_values(1));
         text(mean(N_values), mean(computation_times), ...
@@ -274,7 +241,6 @@ else
     end
 end
 
-% Plot 4: Performance efficiency (Time per Gaussian component)
 subplot(2, 2, 4);
 time_per_component = computation_times ./ N_values;
 bar(N_values, time_per_component, 'FaceColor', [0.7, 0.3, 0.9], 'EdgeColor', 'black', 'LineWidth', 1.5);
@@ -283,168 +249,12 @@ ylabel('Time per Component (seconds)');
 title('Computational Efficiency (Time per Gaussian)');
 grid on;
 
-% Add value labels on bars
 for idx = 1:length(N_values)
     text(N_values(idx), time_per_component(idx) + max(time_per_component)*0.02, ...
          sprintf('%.3f', time_per_component(idx)), ...
          'HorizontalAlignment', 'center', 'FontSize', 9, 'FontWeight', 'bold');
 end
 
-%% Additional Analysis Plot: Convergence Analysis with Timing
-figure('Position', [200, 200, 1200, 800]);
-
-% Plot 1: Mean Bhattacharyya Distance vs N
-subplot(2, 2, 1);
-mean_bhatt_distances = cellfun(@mean, bhattacharyya_distances);
-semilogx(N_values, mean_bhatt_distances, 'bo-', 'LineWidth', 2, 'MarkerSize', 8);
-xlabel('Number of Gaussian Components (N)');
-ylabel('Mean Bhattacharyya Distance');
-title('Convergence: Mean Bhattacharyya Distance vs N');
-grid on;
-
-% Plot 2: NEW - Mean Euclidean Distance vs N
-subplot(2, 2, 2);
-mean_eucl_distances = cellfun(@mean, euclidean_distances);
-semilogx(N_values, mean_eucl_distances, 'ro-', 'LineWidth', 2, 'MarkerSize', 8);
-xlabel('Number of Gaussian Components (N)');
-ylabel('Mean Euclidean Distance Error (m)');
-title('Convergence: Mean Euclidean Error vs N');
-grid on;
-
-% Plot 3: Performance Trade-off (Euclidean Accuracy vs Time)
-subplot(2, 2, 3);
-scatter(computation_times, mean_eucl_distances, 100, N_values, 'filled', 'MarkerEdgeColor', 'black');
-colorbar;
-xlabel('Computation Time (seconds)');
-ylabel('Mean Euclidean Distance Error (m)');
-title('Performance Trade-off: Euclidean Accuracy vs Time');
-grid on;
-
-% Add labels for each point
-for idx = 1:length(N_values)
-    text(computation_times(idx) + max(computation_times)*0.02, mean_eucl_distances(idx), ...
-         sprintf('N=%d', N_values(idx)), 'FontSize', 10, 'FontWeight', 'bold');
-end
-
-% Plot 4: Distance evolution over time for all N values (Euclidean)
-subplot(2, 2, 4);
-hold on;
-for idx = 1:length(N_values)
-    d_eucl_km = euclidean_distances{idx} / 1000; % Convert to km for plotting
-    plot(time_hours, d_eucl_km, ...
-         'LineWidth', 1.5, 'DisplayName', sprintf('N=%d (%.2fs)', N_values(idx), computation_times(idx)));
-end
-xlabel('Time (hours)');
-ylabel('Euclidean Distance Error (km)');
-title('Euclidean Error Evolution with Computation Times');
-legend('Location', 'best');
-grid on;
-
-%% NEW: Bhattacharyya Distance at Specific Time Intervals
-% Define time points of interest (1, 2, 3, ... hours)
-target_hours = 1:1:floor(max(time_hours));
-time_indices = zeros(size(target_hours));
-
-% Find closest time indices for each target hour
-for i = 1:length(target_hours)
-    [~, time_indices(i)] = min(abs(time_hours - target_hours(i)));
-end
-
-% Extract distances at specific time points
-bhatt_distances_at_times = zeros(length(N_values), length(target_hours));
-eucl_distances_at_times = zeros(length(N_values), length(target_hours)); % NEW
-for idx = 1:length(N_values)
-    d_bhatt = bhattacharyya_distances{idx};
-    d_eucl = euclidean_distances{idx};
-    bhatt_distances_at_times(idx, :) = d_bhatt(time_indices);
-    eucl_distances_at_times(idx, :) = d_eucl(time_indices); % NEW
-end
-
-% Create new figure for time-specific analysis
-figure('Position', [300, 300, 1400, 900]);
-
-% Plot 1: Bar chart showing Bhattacharyya distances at different hours
-subplot(2, 2, 1);
-bar_width = 0.8;
-x_positions = 1:length(target_hours);
-bar_handle = bar(x_positions, bhatt_distances_at_times', bar_width, 'grouped');
-
-% Color the bars
-for idx = 1:length(N_values)
-    bar_handle(idx).DisplayName = sprintf('N=%d', N_values(idx));
-end
-
-xlabel('Time (hours)');
-ylabel('Bhattacharyya Distance');
-title('Bhattacharyya Distance at Hourly Intervals');
-legend('Location', 'best');
-grid on;
-set(gca, 'XTick', x_positions, 'XTickLabel', target_hours);
-
-% Plot 2: NEW - Bar chart showing Euclidean distances at different hours
-subplot(2, 2, 2);
-bar_handle2 = bar(x_positions, eucl_distances_at_times', bar_width, 'grouped');
-
-% Color the bars
-for idx = 1:length(N_values)
-    bar_handle2(idx).DisplayName = sprintf('N=%d', N_values(idx));
-end
-
-xlabel('Time (hours)');
-ylabel('Euclidean Distance Error (m)');
-title('Euclidean Distance Error at Hourly Intervals');
-legend('Location', 'best');
-grid on;
-set(gca, 'XTick', x_positions, 'XTickLabel', target_hours);
-
-% Plot 3: NEW - Correlation between Bhattacharyya and Euclidean distances
-subplot(2, 2, 3);
-colors = lines(length(N_values));
-for idx = 1:length(N_values)
-    scatter(bhattacharyya_distances{idx}, euclidean_distances{idx}, 50, colors(idx,:), 'filled', ...
-           'DisplayName', sprintf('N=%d', N_values(idx)));
-    hold on;
-end
-xlabel('Bhattacharyya Distance');
-ylabel('Euclidean Distance Error (m)');
-title('Correlation: Bhattacharyya vs Euclidean Distance');
-legend('Location', 'best');
-grid on;
-
-% Plot 4: NEW - Error reduction over time
-subplot(2, 2, 4);
-if length(N_values) > 1
-    % Show improvement of higher N compared to N=1
-    base_eucl = euclidean_distances{1}; % N=1 baseline
-    for idx = 2:length(N_values)
-        current_eucl = euclidean_distances{idx};
-        error_reduction = (base_eucl - current_eucl) ./ base_eucl * 100; % Percentage improvement
-        plot(time_hours, error_reduction, 'LineWidth', 2, ...
-             'DisplayName', sprintf('N=%d vs N=1', N_values(idx)));
-        hold on;
-    end
-    xlabel('Time (hours)');
-    ylabel('Error Reduction (%)');
-    title('Euclidean Error Reduction Compared to N=1');
-    legend('Location', 'best');
-    grid on;
-end
-
-%% Display comprehensive statistics
-fprintf('\n=== Comprehensive Distance Statistics ===\n');
-fprintf('%-8s %-12s %-12s %-12s %-12s %-12s %-12s %-15s\n', ...
-        'N', 'Bhatt Mean', 'Bhatt Max', 'Eucl Mean', 'Eucl Max', 'Eucl RMS', 'Eucl Std', 'Comp. Time (s)');
-fprintf('%-8s %-12s %-12s %-12s %-12s %-12s %-12s %-15s\n', ...
-        '---', '----------', '----------', '---------', '---------', '---------', '--------', '--------------');
-
-for idx = 1:length(N_values)
-    d_bhatt = bhattacharyya_distances{idx};
-    d_eucl = euclidean_distances{idx};
-    fprintf('%-8d %-12.6f %-12.6f %-12.3f %-12.3f %-12.3f %-12.3f %-15.3f\n', ...
-        N_values(idx), mean(d_bhatt), max(d_bhatt), ...
-        mean(d_eucl), max(d_eucl), sqrt(mean(d_eucl.^2)), std(d_eucl), ...
-        computation_times(idx));
-end
 
 % Compute improvement percentages
 fprintf('\n=== Improvement Analysis ===\n');
@@ -474,45 +284,31 @@ for idx = 2:length(N_values)
 end
 
 function d = bhattacharyya_distance(mu1, Sigma1, mu2, Sigma2)
-% Computes the Bhattacharyya distance between two multivariate Gaussians.
-% 
-% Inputs:
-%   mu1, mu2     - Mean vectors (nx1)
-%   Sigma1, Sigma2 - Covariance matrices (nxn)
-%
-% Output:
-%   d - Bhattacharyya distance (scalar)
 
-    % Check dimension consistency
     assert(all(size(mu1) == size(mu2)), 'Mean vectors must be the same size.');
     assert(all(size(Sigma1) == size(Sigma2)), 'Covariance matrices must be the same size.');
     
-    % Average covariance
     Sigma = 0.5 * (Sigma1 + Sigma2);
     
-    % Regularize in case of near-singular matrix
     epsilon = 1e-6;
     Sigma = Sigma + epsilon * eye(size(Sigma));
     
-    % First term (Mahalanobis-like term)
     diff = mu1 - mu2;
     term1 = 0.125 * (diff') * (Sigma \ diff);
     
-    % Second term (determinant term)
     det_Sigma1 = det(Sigma1 + epsilon * eye(size(Sigma1)));
     det_Sigma2 = det(Sigma2 + epsilon * eye(size(Sigma2)));
     det_Sigma  = det(Sigma);
     
-    % Handle numerical issues with determinants
     if det_Sigma <= 0 || det_Sigma1 <= 0 || det_Sigma2 <= 0
         term2 = 0;
     else
         term2 = 0.5 * log(det_Sigma / sqrt(det_Sigma1 * det_Sigma2));
     end
     
-    % Bhattacharyya distance
     d = term1 + term2;
 end
+
 
 function [ISS_mixture_cov, ISS_mixture_mean, ISS_gaussian_means, ISS_gaussian_covs, ISS_mu_components, ISS_P_components, gaussian_weights] = GenerateGSF(mu, P, N, numSamples, startTime, stopTime)
 sampleTime = 30; % seconds
