@@ -237,7 +237,7 @@ grid on;
 
 sgtitle('ISS Orbit Uncertainty: Skewness and Kurtosis Evolution', 'FontSize', 14, 'FontWeight', 'bold');
 
-%% Create a combined overview plot
+
 figure('Position', [150, 150, 1200, 600]);
 
 subplot(1, 2, 1);
@@ -271,26 +271,6 @@ legend('X Pos', 'Y Pos', 'Z Pos', 'X Vel', 'Y Vel', 'Z Vel', 'Normal Ref', 'Loca
 grid on;
 
 sgtitle('ISS Orbit Uncertainty: Complete Statistical Evolution', 'FontSize', 14, 'FontWeight', 'bold');
-
-%% Optional: Create statistical summary
-fprintf('\n=== Statistical Summary ===\n');
-fprintf('Final skewness values:\n');
-fprintf('  Position (X,Y,Z): %.4f, %.4f, %.4f\n', Particle_weighted_skewness(1,end), Particle_weighted_skewness(2,end), Particle_weighted_skewness(3,end));
-fprintf('  Velocity (X,Y,Z): %.4f, %.4f, %.4f\n', Particle_weighted_skewness(4,end), Particle_weighted_skewness(5,end), Particle_weighted_skewness(6,end));
-
-fprintf('Final kurtosis values:\n');
-fprintf('  Position (X,Y,Z): %.4f, %.4f, %.4f\n', Particle_weighted_kurtosis(1,end), Particle_weighted_kurtosis(2,end), Particle_weighted_kurtosis(3,end));
-fprintf('  Velocity (X,Y,Z): %.4f, %.4f, %.4f\n', Particle_weighted_kurtosis(4,end), Particle_weighted_kurtosis(5,end), Particle_weighted_kurtosis(6,end));
-
-fprintf('\nSkewness interpretation:\n');
-fprintf('  > 0: Right-skewed (tail extends toward positive values)\n');
-fprintf('  < 0: Left-skewed (tail extends toward negative values)\n');
-fprintf('  ≈ 0: Approximately symmetric\n');
-
-fprintf('\nKurtosis interpretation:\n');
-fprintf('  > 3: Heavy-tailed (more extreme values than normal distribution)\n');
-fprintf('  < 3: Light-tailed (fewer extreme values than normal distribution)\n');
-fprintf('  ≈ 3: Similar to normal distribution\n');
 
 fprintf('\nPlots generated successfully!\n');
 function [Weights, positions, velocities, Keplerian_Particles, Equinoctial_Particles] = GenerateGSF(mu, P, numSamples, startTime, stopTime, sc_mean)
